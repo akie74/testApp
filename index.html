@@ -1,41 +1,690 @@
-let homeTimer = null;
-let paymentInProgress = false;
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>실전 병원 키오스크 체험</title>
+    <style>
+        :root {
+            --bg: #e2e8f0;
+            --panel: #ffffff;
+            --header: #1e3a8a;
+            --primary: #3b82f6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --dark: #2d3748;
+            --muted: #718096;
+            --line: #cbd5e0;
+        }
 
-function goHome() {
-    if (homeTimer) {
-        clearTimeout(homeTimer);
-        homeTimer = null;
+        * {
+            box-sizing: border-box;
+            font-family: "Malgun Gothic", "맑은 고딕", sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg);
+            overflow: hidden;
+        }
+
+        body {
+            user-select: none;
+        }
+
+        /* 모바일 브라우저 주소창 높이 변화 대응 */
+        .app-shell {
+            width: 100%;
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: max(12px, env(safe-area-inset-top))
+                     max(12px, env(safe-area-inset-right))
+                     max(12px, env(safe-area-inset-bottom))
+                     max(12px, env(safe-area-inset-left));
+            background: var(--bg);
+        }
+
+        /* 화면 크기에 따라 자연스럽게 비율 유지 */
+        #kiosk-container {
+            width: min(100%, 1280px);
+            height: min(100dvh - 24px, 900px);
+            min-height: 600px;
+            background-color: var(--panel);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.18);
+            border-radius: 18px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background-color: var(--header);
+            color: white;
+            padding: clamp(18px, 2.2vw, 30px);
+            text-align: center;
+            font-size: clamp(1.5rem, 2vw, 2.5rem);
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .home-btn-container {
+            position: absolute;
+            right: clamp(12px, 2vw, 30px);
+            bottom: clamp(12px, 2vw, 30px);
+            z-index: 100;
+        }
+
+        .home-btn {
+            background-color: #4a5568;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: clamp(12px, 1.2vw, 20px) clamp(22px, 2.2vw, 40px);
+            font-size: clamp(1rem, 1.3vw, 1.8rem);
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.25);
+        }
+
+        .home-btn:active {
+            background-color: #2d3748;
+        }
+
+        .screen {
+            flex: 1;
+            min-height: 0;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: clamp(20px, 3vw, 50px) clamp(16px, 2vw, 24px) clamp(80px, 8vw, 120px);
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .screen.active {
+            display: flex;
+        }
+
+        h2.title {
+            font-size: clamp(1.6rem, 2.4vw, 3rem);
+            color: var(--dark);
+            margin: 0 0 clamp(24px, 4vw, 50px);
+            text-align: center;
+            line-height: 1.4;
+        }
+
+        .main-btn-group {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(260px, 1fr));
+            gap: clamp(16px, 2vw, 40px);
+            width: min(90%, 960px);
+            margin: auto 0;
+        }
+
+        .main-btn {
+            border: none;
+            border-radius: 20px;
+            min-height: clamp(180px, 30vh, 320px);
+            font-size: clamp(2rem, 3vw, 4rem);
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+            transition: transform 0.1s;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 14px;
+            padding: 20px;
+        }
+
+        .main-btn:active {
+            transform: translateY(5px);
+        }
+
+        .btn-register {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .btn-payment {
+            background-color: var(--success);
+            color: white;
+        }
+
+        .input-display {
+            font-size: clamp(1.6rem, 3vw, 4rem);
+            letter-spacing: clamp(2px, 0.5vw, 10px);
+            font-weight: bold;
+            background: #edf2f7;
+            padding: clamp(18px, 2vw, 30px) clamp(14px, 2vw, 20px);
+            border-radius: 15px;
+            margin-bottom: clamp(20px, 3vw, 40px);
+            width: min(90%, 700px);
+            text-align: center;
+            border: 3px solid var(--line);
+            color: #1a202c;
+            word-break: break-all;
+            line-height: 1.5;
+        }
+
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(80px, 1fr));
+            gap: clamp(10px, 1.5vw, 20px);
+            width: min(92%, 520px);
+        }
+
+        .key-btn {
+            min-height: clamp(70px, 10vw, 110px);
+            font-size: clamp(1.4rem, 2vw, 2.5rem);
+            font-weight: bold;
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 15px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        .key-btn:active {
+            background: #e2e8f0;
+        }
+
+        .key-btn.action-del {
+            background: var(--danger);
+            color: white;
+            border-color: var(--danger);
+        }
+
+        .key-btn.action-ok {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .dept-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(180px, 1fr));
+            gap: clamp(14px, 2vw, 30px);
+            width: min(92%, 760px);
+        }
+
+        .dept-btn {
+            min-height: clamp(100px, 16vw, 160px);
+            padding: 20px;
+            font-size: clamp(1.4rem, 2vw, 2.5rem);
+            font-weight: bold;
+            background: white;
+            border: 4px solid var(--primary);
+            color: var(--primary);
+            border-radius: 20px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .dept-btn:active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .bill-box {
+            background: white;
+            border: 3px solid var(--line);
+            border-radius: 15px;
+            width: min(92%, 700px);
+            padding: clamp(20px, 3vw, 40px);
+            font-size: clamp(1.2rem, 1.6vw, 2rem);
+            margin-bottom: clamp(20px, 3vw, 40px);
+        }
+
+        .bill-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 18px;
+            border-bottom: 2px dashed #e2e8f0;
+            padding-bottom: 10px;
+        }
+
+        .bill-total {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            font-size: clamp(1.6rem, 2.2vw, 3rem);
+            font-weight: bold;
+            color: #e53e3e;
+            margin-top: 24px;
+        }
+
+        .pay-action-btn {
+            background-color: var(--success);
+            color: white;
+            font-size: clamp(1.6rem, 2.2vw, 3rem);
+            font-weight: bold;
+            padding: clamp(18px, 2vw, 30px) clamp(32px, 5vw, 80px);
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+        }
+
+        .pay-action-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .modal-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+            padding: 20px;
+        }
+
+        .modal-content {
+            background: white;
+            padding: clamp(24px, 4vw, 60px);
+            border-radius: 20px;
+            text-align: center;
+            width: min(100%, 640px);
+        }
+
+        .card-insert-ani {
+            font-size: clamp(4rem, 8vw, 8rem);
+            margin: 24px 0;
+            color: var(--primary);
+            animation: bounce 1s infinite alternate;
+        }
+
+        @keyframes bounce {
+            from { transform: translateY(0); }
+            to { transform: translateY(-20px); }
+        }
+
+        .receipt {
+            background: white;
+            border: 2px solid #ccc;
+            padding: clamp(24px, 4vw, 50px);
+            width: min(92%, 640px);
+            text-align: center;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+        }
+
+        .wait-number {
+            font-size: clamp(3rem, 6vw, 6rem);
+            font-weight: bold;
+            color: var(--primary);
+            margin: 20px 0;
+            line-height: 1.2;
+        }
+
+        .print-msg {
+            font-size: clamp(1.1rem, 1.8vw, 2rem);
+            color: #e53e3e;
+            font-weight: bold;
+            margin-top: 24px;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        /* 가로가 좁아지면 자동 1열 */
+        @media (max-width: 900px) {
+            #kiosk-container {
+                width: 100%;
+                height: 100dvh;
+                min-height: auto;
+                border-radius: 0;
+            }
+
+            .main-btn-group {
+                grid-template-columns: 1fr;
+                width: min(94%, 700px);
+            }
+
+            .dept-grid {
+                grid-template-columns: 1fr;
+                width: min(94%, 520px);
+            }
+        }
+
+        /* 세로가 낮은 디바이스 대응 */
+        @media (max-height: 700px) {
+            header {
+                padding: 14px 18px;
+            }
+
+            .screen {
+                padding-top: 16px;
+                padding-bottom: 80px;
+            }
+
+            .main-btn {
+                min-height: 140px;
+            }
+
+            .dept-btn {
+                min-height: 84px;
+            }
+
+            .key-btn {
+                min-height: 60px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .bill-row,
+            .bill-total {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .home-btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="app-shell">
+    <div id="kiosk-container">
+        <header>한국대학교병원 무인 키오스크</header>
+
+        <div class="home-btn-container" id="homeBtnContainer" style="display: none;">
+            <button class="home-btn" onclick="goHome()">처음으로</button>
+        </div>
+
+        <!-- 1. 메인 화면 -->
+        <div id="screen-home" class="screen active" style="justify-content: center;">
+            <h2 class="title">원하시는 업무를 선택해 주세요</h2>
+            <div class="main-btn-group">
+                <button class="main-btn btn-register" onclick="startFlow('접수')">
+                    <span>📋</span>
+                    <span>진료 접수</span>
+                </button>
+                <button class="main-btn btn-payment" onclick="startFlow('수납')">
+                    <span>💳</span>
+                    <span>수납 / 처방전</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 2. 주민번호 입력 화면 -->
+        <div id="screen-ssn" class="screen">
+            <h2 class="title">환자분의 <span style="color:#3b82f6;">주민등록번호</span>를 입력해 주세요</h2>
+            <div id="ssnDisplay" class="input-display">주민등록번호 13자리 입력</div>
+            <div class="keypad">
+                <button class="key-btn" onclick="inputNumber(1)">1</button>
+                <button class="key-btn" onclick="inputNumber(2)">2</button>
+                <button class="key-btn" onclick="inputNumber(3)">3</button>
+                <button class="key-btn" onclick="inputNumber(4)">4</button>
+                <button class="key-btn" onclick="inputNumber(5)">5</button>
+                <button class="key-btn" onclick="inputNumber(6)">6</button>
+                <button class="key-btn" onclick="inputNumber(7)">7</button>
+                <button class="key-btn" onclick="inputNumber(8)">8</button>
+                <button class="key-btn" onclick="inputNumber(9)">9</button>
+                <button class="key-btn action-del" onclick="deleteNumber()">지움</button>
+                <button class="key-btn" onclick="inputNumber(0)">0</button>
+                <button class="key-btn action-ok" onclick="submitSsn()">확인</button>
+            </div>
+        </div>
+
+        <!-- 3. 진료과 선택 화면 -->
+        <div id="screen-dept" class="screen">
+            <h2 class="title">접수하실 <span style="color:#3b82f6;">진료과</span>를 선택해 주세요</h2>
+            <div class="dept-grid">
+                <button class="dept-btn" onclick="completeRegistration('내과')">내과</button>
+                <button class="dept-btn" onclick="completeRegistration('정형외과')">정형외과</button>
+                <button class="dept-btn" onclick="completeRegistration('안과')">안과</button>
+                <button class="dept-btn" onclick="completeRegistration('이비인후과')">이비인후과</button>
+            </div>
+        </div>
+
+        <!-- 4. 수납 화면 -->
+        <div id="screen-payment" class="screen">
+            <h2 class="title">수납하실 내역을 확인해 주세요</h2>
+            <div class="bill-box">
+                <div class="bill-row"><span>환자명</span><span>홍길동 님</span></div>
+                <div class="bill-row"><span>진료과</span><span>내과</span></div>
+                <div class="bill-row"><span>진찰료</span><span>12,500 원</span></div>
+                <div class="bill-row"><span>검사료</span><span>25,000 원</span></div>
+                <div class="bill-total"><span>총 결제금액</span><span>37,500 원</span></div>
+            </div>
+            <button id="payBtn" class="pay-action-btn" onclick="showCardInsert()">카드 결제하기</button>
+        </div>
+
+        <!-- 5. 카드 삽입 모달 -->
+        <div id="modal-card" class="modal-overlay">
+            <div class="modal-content">
+                <h2 style="font-size:clamp(1.6rem, 3vw, 3rem); margin-bottom:20px;">
+                    IC 카드를 끝까지 밀어 넣어주세요
+                </h2>
+                <div class="card-insert-ani">💳 ⬇️</div>
+                <p style="font-size:clamp(1.1rem, 2vw, 2rem); color:#718096;">
+                    (결제가 진행중입니다. 잠시만 기다려주세요)
+                </p>
+            </div>
+        </div>
+
+        <!-- 6. 완료 화면 -->
+        <div id="screen-done" class="screen" style="justify-content: center;">
+            <div class="receipt">
+                <h2 id="doneTitle" style="font-size:clamp(1.8rem, 3vw, 3rem); margin-top:0;">
+                    접수가 완료되었습니다
+                </h2>
+                <p id="doneSubText" style="font-size:clamp(1.1rem, 2vw, 2rem);">선택 진료과: 내과</p>
+                <p id="doneLabel" style="font-size:clamp(1rem, 1.6vw, 1.5rem); margin-top:30px;">대기번호</p>
+                <div id="doneNumber" class="wait-number">105</div>
+                <p class="print-msg">아래에서 출력된 용지를 챙겨가세요!</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentFlow = "";
+    let ssn = "";
+    let waitCount = 104;
+
+    let homeTimer = null;
+    let paymentTimer = null;
+    let paymentInProgress = false;
+
+    function clearAllTimers() {
+        if (homeTimer) {
+            clearTimeout(homeTimer);
+            homeTimer = null;
+        }
+        if (paymentTimer) {
+            clearTimeout(paymentTimer);
+            paymentTimer = null;
+        }
     }
 
-    ssn = '';
-    currentFlow = '';
-    paymentInProgress = false;
-    updateSsnDisplay();
-    showScreen('screen-home');
-}
+    function showScreen(screenId) {
+        document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
+        document.getElementById(screenId).classList.add("active");
 
-function showCardInsert() {
-    if (paymentInProgress) return;
-    paymentInProgress = true;
+        if (screenId === "screen-home" || screenId === "screen-done") {
+            document.getElementById("homeBtnContainer").style.display = "none";
+        } else {
+            document.getElementById("homeBtnContainer").style.display = "block";
+        }
+    }
 
-    const modal = document.getElementById('modal-card');
-    modal.style.display = 'flex';
+    function goHome() {
+        clearAllTimers();
 
-    setTimeout(() => {
-        modal.style.display = 'none';
-        completePayment();
+        ssn = "";
+        currentFlow = "";
         paymentInProgress = false;
-    }, 3000);
-}
 
-function finishFlow() {
-    document.getElementById('homeBtnContainer').style.display = 'none';
+        const modal = document.getElementById("modal-card");
+        modal.style.display = "none";
 
-    if (homeTimer) {
-        clearTimeout(homeTimer);
+        const payBtn = document.getElementById("payBtn");
+        payBtn.disabled = false;
+
+        updateSsnDisplay();
+        showScreen("screen-home");
     }
 
-    homeTimer = setTimeout(() => {
-        goHome();
-    }, 7000);
-}
+    function startFlow(flowType) {
+        clearAllTimers();
+
+        currentFlow = flowType;
+        ssn = "";
+        paymentInProgress = false;
+
+        const modal = document.getElementById("modal-card");
+        modal.style.display = "none";
+
+        const payBtn = document.getElementById("payBtn");
+        payBtn.disabled = false;
+
+        updateSsnDisplay();
+        showScreen("screen-ssn");
+    }
+
+    function inputNumber(num) {
+        if (ssn.length < 13) {
+            ssn += String(num);
+            updateSsnDisplay();
+        }
+    }
+
+    function deleteNumber() {
+        if (ssn.length > 0) {
+            ssn = ssn.slice(0, -1);
+            updateSsnDisplay();
+        }
+    }
+
+    function updateSsnDisplay() {
+        const display = document.getElementById("ssnDisplay");
+
+        if (ssn.length === 0) {
+            display.innerText = "주민등록번호 13자리 입력";
+            display.style.color = "#a0aec0";
+            return;
+        }
+
+        display.style.color = "#1a202c";
+
+        let formatted = "";
+        for (let i = 0; i < 13; i++) {
+            if (i === 6) formatted += "- ";
+
+            if (i < ssn.length) {
+                if (i >= 6) {
+                    formatted += "* ";
+                } else {
+                    formatted += ssn[i] + " ";
+                }
+            } else {
+                formatted += "_ ";
+            }
+        }
+
+        display.innerText = formatted.trim();
+    }
+
+    function submitSsn() {
+        if (ssn.length < 13) {
+            alert("주민등록번호 13자리를 모두 입력해주세요.");
+            return;
+        }
+
+        if (currentFlow === "접수") {
+            showScreen("screen-dept");
+        } else if (currentFlow === "수납") {
+            showScreen("screen-payment");
+        }
+    }
+
+    function completeRegistration(deptName) {
+        waitCount++;
+
+        document.getElementById("doneTitle").innerText = "진료 접수가 완료되었습니다";
+        document.getElementById("doneSubText").innerText = `선택 진료과: ${deptName}`;
+        document.getElementById("doneLabel").innerText = "대기번호";
+        document.getElementById("doneNumber").innerText = waitCount;
+
+        showScreen("screen-done");
+        finishFlow();
+    }
+
+    function showCardInsert() {
+        if (paymentInProgress) return;
+
+        paymentInProgress = true;
+
+        const payBtn = document.getElementById("payBtn");
+        payBtn.disabled = true;
+
+        const modal = document.getElementById("modal-card");
+        modal.style.display = "flex";
+
+        if (paymentTimer) {
+            clearTimeout(paymentTimer);
+        }
+
+        paymentTimer = setTimeout(() => {
+            modal.style.display = "none";
+            paymentTimer = null;
+            completePayment();
+        }, 3000);
+    }
+
+    function completePayment() {
+        document.getElementById("doneTitle").innerText = "수납이 완료되었습니다";
+        document.getElementById("doneSubText").innerText = "처방전과 영수증이 출력됩니다.";
+        document.getElementById("doneLabel").innerText = "결제상태";
+        document.getElementById("doneNumber").innerText = "완료";
+
+        paymentInProgress = false;
+
+        const payBtn = document.getElementById("payBtn");
+        payBtn.disabled = false;
+
+        showScreen("screen-done");
+        finishFlow();
+    }
+
+    function finishFlow() {
+        document.getElementById("homeBtnContainer").style.display = "none";
+
+        if (homeTimer) {
+            clearTimeout(homeTimer);
+        }
+
+        homeTimer = setTimeout(() => {
+            goHome();
+        }, 7000);
+    }
+
+    /* 화면 회전/브라우저 크기 변경 시 레이아웃 재계산 유도 */
+    window.addEventListener("resize", () => {
+        document.body.style.height = window.innerHeight + "px";
+    });
+
+    document.body.style.height = window.innerHeight + "px";
+</script>
+</body>
+</html>
